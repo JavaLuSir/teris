@@ -17,6 +17,9 @@ body {
   color: #fff;
   padding: 20px;
 }
+.menu { margin-bottom: 20px; }
+.menu a { color: #00d4ff; text-decoration: none; margin: 0 10px; font-size: 16px; }
+.menu a:hover { text-decoration: underline; }
 h1 { margin-bottom: 20px; text-shadow: 0 0 10px #e94560; }
 .game-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
 .canvas-wrap { position: relative; border: 3px solid #e94560; border-radius: 8px; overflow: hidden; box-shadow: 0 0 30px rgba(233,69,96,0.3); }
@@ -82,6 +85,10 @@ canvas { display: block; background: #16213e; }
 </style>
 </head>
 <body>
+<div class="menu">
+  <a href="teris.html">俄罗斯方块</a>
+  <a href="breakout.html">打砖块</a>
+</div>
 <h1>🎮 俄罗斯方块</h1>
 <div class="game-container">
   <div class="canvas-wrap">
