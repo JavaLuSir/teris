@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>计算器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    .calculator {
+      background: #1e1e2e;
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+      width: 340px;
+    }
+
+    .display {
+      background: #0d0d14;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: right;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .display .expression {
+      color: #6b7280;
+      font-size: 14px;
+      min-height: 20px;
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+
+    .display .result {
+      color: #ffffff;
+      font-size: 36px;
+      font-weight: 300;
+      word-break: break-all;
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    button {
+      border: none;
+      outline: none;
+      font-size: 20px;
+      font-weight: 500;
+      padding: 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
+    .btn-number {
+      background: #2d2d3d;
+      color: #ffffff;
+    }
+
+    .btn-number:hover {
+      background: #3d3d4d;
+    }
+
+    .btn-operator {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+
+    .btn-operator:hover {
+      background: #6366f1;
+    }
+
+    .btn-equals {
+      background: #10b981;
+      color: #ffffff;
+      grid-column: span 2;
+    }
+
+    .btn-equals:hover {
+      background: #34d399;
+    }
+
+    .btn-clear {
+      background: #ef4444;
+      color: #ffffff;
+    }
+
+    .btn-clear:hover {
+      background: #f87171;
+    }
+
+    .btn-delete {
+      background: #f59e0b;
+      color: #ffffff;
+    }
+
+    .btn-delete:hover {
+      background: #fbbf24;
+    }
+  </style>
+</head>
+<body>
+  <div class="calculator">
+    <div class="display">
+      <div class="expression" id="expression"></div>
+      <div class="result" id="result">0</div>
+    </div>
+    <div class="buttons">
+      <button class="btn-clear" onclick="clearAll()">C</button>
+      <button class="btn-delete" onclick="deleteChar()">⌫</button>
+      <button class="btn-operator" onclick="addOperator('/')">÷</button>
+      <button class="btn-operator" onclick="addOperator('*')">×</button>
+      
+      <button class="btn-number" onclick="addNumber('7')">7</button>
+      <button class="btn-number" onclick="addNumber('8')">8</button>
+      <button class="btn-number" onclick="addNumber('9')">9</button>
+      <button class="btn-operator" onclick="addOperator('-')">−</button>
+      
+      <button class="btn-number" onclick="addNumber('4')">4</button>
+      <button class="btn-number" onclick="addNumber('5')">5</button>
+      <button class="btn-number" onclick="addNumber('6')">6</button>
+      <button class="btn-operator" onclick="addOperator('+')">+</button>
+      
+      <button class="btn-number" onclick="addNumber('1')">1</button>
+      <button class="btn-number" onclick="addNumber('2')">2</button>
+      <button class="btn-number" onclick="addNumber('3')">3</button>
+      <button class="btn-equals" onclick="calculate()">=</button>
+      
+      <button class="btn-number" onclick="addNumber('0')" style="grid-column: span 2;">0</button>
+      <button class="btn-number" onclick="addNumber('.')">.</button>
+    </div>
+  </div>
+
+  <script>
+    let expression = '';
+    let result = '0';
+    let justCalculated = false;
+
+    const expressionEl = document.getElementById('expression');
+    const resultEl = document.getElementById('result');
+
+    function updateDisplay() {
+      expressionEl.textContent = expression;
+      resultEl.textContent = result;
+    }
+
+    function addNumber(num) {
+      if (justCalculated) {
+        expression = result === 'Error' ? '' : result;
+        justCalculated = false;
+      }
+      
+      if (num === '.') {
+        const lastNumber = expression.split(/[+\-*/]/).pop();
+        if (lastNumber && lastNumber.includes('.')) return;
+        if (!lastNumber) {
+          expression += '0.';
+          result = '0.';
+          updateDisplay();
+          return;
+        }
+      }
+      
+      expression += num;
+      try {
+        if (!/[+\-*/]$/.test(expression)) {
+          const evalResult = evaluate(expression);
+          result = formatResult(evalResult);
+        } else {
+          result = expression.split(/[+\-*/]/).pop() || '0';
+        }
+      } catch {
+        result = 'Error';
+      }
+      updateDisplay();
+    }
+
+    function addOperator(op) {
+      if (justCalculated) {
+        justCalculated = false;
+      }
+      
+      if (!expression && result !== '0' && result !== 'Error') {
+        expression = result;
+      }
+      
+      if (!expression) return;
+      
+      const lastChar = expression.slice(-1);
+      if (['+', '-', '*', '/'].includes(lastChar)) {
+        expression = expression.slice(0, -1) + op;
+      } else {
+        expression += op;
+      }
+      
+      result = expression.split(/[+\-*/]/).pop() || '0';
+      updateDisplay();
+    }
+
+    function calculate() {
+      if (!expression) return;
+      
+      try {
+        const evalResult = evaluate(expression);
+        expression = formatResult(evalResult);
+        result = expression;
+        justCalculated = true;
+      } catch (e) {
+        expression = '';
+        result = 'Error';
+      }
+      updateDisplay();
+    }
+
+    function evaluate(expr) {
+      expr = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+      return Function('"use strict"; return (' + expr + ')')();
+    }
+
+    function formatResult(num) {
+      if (!isFinite(num) || isNaN(num)) return 'Error';
+      if (Number.isInteger(num)) return num.toString();
+      return parseFloat(num.toFixed(10)).toString();
+    }
+
+    function clearAll() {
+      expression = '';
+      result = '0';
+      justCalculated = false;
+      updateDisplay();
+    }
+
+    function deleteChar() {
+      if (justCalculated) {
+        expression = result;
+        justCalculated = false;
+      }
+      
+      expression = expression.slice(0, -1);
+      
+      if (!expression) {
+        result = '0';
+      } else {
+        try {
+          const evalResult = evaluate(expression);
+          result = formatResult(evalResult);
+        } catch {
+          result = expression.split(/[+\-*/]/).pop() || '0';
+        }
+      }
+      updateDisplay();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key >= '0' && e.key <= '9') addNumber(e.key);
+      if (e.key === '.') addNumber('.');
+      if (e.key === '+') addOperator('+');
+      if (e.key === '-') addOperator('-');
+      if (e.key === '*') addOperator('*');
+      if (e.key === '/') addOperator('/');
+      if (e.key === 'Enter' || e.key === '=') calculate();
+      if (e.key === 'Escape') clearAll();
+      if (e.key === 'Backspace') deleteChar();
+    });
+  </script>
+</body>
+</html>
