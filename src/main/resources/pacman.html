@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>吃豆子游戏</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #111;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Segoe UI', sans-serif;
+  color: #fff;
+  overflow: hidden;
+}
+h1 { margin-bottom: 10px; text-shadow: 0 0 10px #ffeb3b; font-size: 24px; }
+.game-container { position: relative; }
+canvas { 
+  background: #000; 
+  border: 3px solid #2196F3;
+  border-radius: 8px;
+  box-shadow: 0 0 30px rgba(33,150,243,0.5);
+}
+.score-panel {
+  display: flex;
+  justify-content: space-between;
+  width: 400px;
+  margin-top: 10px;
+  font-size: 18px;
+}
+.score { color: #ffeb3b; }
+.lives { color: #f44336; }
+.controls {
+  margin-top: 15px;
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+}
+.game-over, .game-win {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  display: none;
+}
+.game-over.show, .game-win.show { display: flex; }
+.game-over h2 { color: #f44336; font-size: 32px; }
+.game-win h2 { color: #4CAF50; font-size: 32px; }
+.game-over button, .game-win button {
+  margin-top: 20px;
+  background: #2196F3;
+  color: #fff;
+  border: none;
+  padding: 12px 30px;
+  font-size: 18px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.game-over button:hover, .game-win button:hover { background: #1976D2; }
+.mobile-controls {
+  display: none;
+  margin-top: 15px;
+  gap: 8px;
+}
+@media (max-width: 500px) {
+  .mobile-controls { display: flex; justify-content: center; }
+  .controls { display: none; }
+  canvas { width: 100%; max-width: 350px; }
+  .score-panel { width: 90%; max-width: 350px; }
+}
+.mobile-btn {
+  width: 50px; height: 50px;
+  background: #2196F3;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+<h1>🟡 吃豆子</h1>
+<div class="game-container">
+  <canvas id="game" width="400" height="400"></canvas>
+  <div class="game-over" id="gameOver">
+    <h2>游戏结束!</h2>
+    <button onclick="restart()">再来一局</button>
+  </div>
+  <div class="game-win" id="gameWin">
+    <h2>🎉 恭喜通关!</h2>
+    <button onclick="restart()">再玩一次</button>
+  </div>
+</div>
+<div class="score-panel">
+  <div class="score">得分: <span id="score">0</span></div>
+  <div class="lives">生命: <span id="lives">3</span></div>
+</div>
+<div class="controls">
+  ↑↓←→ 或 WASD 移动 | 空格 暂停
+</div>
+<div class="mobile-controls">
+  <button class="mobile-btn" onclick="setDir(-1,0)">←</button>
+  <button class="mobile-btn" onclick="setDir(0,-1)">↑</button>
+  <button class="mobile-btn" onclick="setDir(0,1)">↓</button>
+  <button class="mobile-btn" onclick="setDir(1,0)">→</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const TILE = 20;
+const COLS = 20;
+const ROWS = 20;
+
+// 地图: 0=空地, 1=墙, 2=豆子, 3=大力丸, 4=吃豆人, 5=幽灵
+const map = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,1,2,1,1,2,1,1,2,1,1,2,1,1,1,2,1],
+  [1,2,1,1,1,2,1,1,2,1,1,2,1,1,2,1,1,1,2,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,1,2,1,2,1,1,1,1,2,1,2,1,1,1,2,1],
+  [1,2,2,2,2,2,1,2,2,1,1,2,2,1,2,2,2,2,2,1],
+  [1,1,1,1,1,2,1,1,1,0,0,1,1,1,2,1,1,1,1,1],
+  [0,0,0,0,1,2,1,0,0,0,0,0,0,1,2,1,0,0,0,0],
+  [1,1,1,1,1,2,1,0,1,1,1,1,0,1,2,1,1,1,1,1],
+  [1,2,2,2,2,2,0,0,1,4,4,1,0,0,2,2,2,2,2,1],
+  [1,1,1,1,1,2,1,0,1,1,1,1,0,1,2,1,1,1,1,1],
+  [0,0,0,0,0,2,0,0,0,0,0,0,0,0,2,0,0,0,0,0],
+  [1,1,1,1,1,2,1,2,1,1,1,1,2,1,2,1,1,1,1,1],
+  [1,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,1,2,1,1,2,1,1,2,1,1,2,1,1,1,2,1],
+  [1,2,2,1,1,2,2,2,2,0,0,2,2,2,2,1,1,2,2,1],
+  [1,1,2,1,1,2,1,2,1,1,1,1,2,1,2,1,1,2,1,1],
+  [1,2,2,2,1,2,1,2,2,2,2,2,2,1,2,1,2,2,2,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+let gameMap = [];
+let pacman = { x: 10, y: 10, dir: { x: 0, y: 0 }, nextDir: { x: 0, y: 0 }, mouth: 0, mouthOpen: true };
+let ghosts = [];
+let score = 0;
+let lives = 3;
+let gameOver = false;
+let gameWin = false;
+let paused = false;
+let powerMode = false;
+let powerTimer = 0;
+
+const ghostColors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
+
+function initGame() {
+  gameMap = map.map(row => [...row]);
+  pacman = { x: 10, y: 10, dir: { x: 0, y: 0 }, nextDir: { x: 0, y: 0 }, mouth: 0, mouthOpen: true };
+  ghosts = [
+    { x: 9, y: 8, color: ghostColors[0], dir: { x: 0, y: -1 } },
+    { x: 10, y: 8, color: ghostColors[1], dir: { x: 0, y: -1 } },
+    { x: 9, y: 9, color: ghostColors[2], dir: { x: 0, y: -1 } },
+    { x: 10, y: 9, color: ghostColors[3], dir: { x: 0, y: -1 } },
+  ];
+  score = 0;
+  lives = 3;
+  gameOver = false;
+  gameWin = false;
+  powerMode = false;
+  powerTimer = 0;
+  document.getElementById('gameOver').classList.remove('show');
+  document.getElementById('gameWin').classList.remove('show');
+  updateScore();
+}
+
+function updateScore() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('lives').textContent = lives;
+}
+
+function canMove(x, y) {
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+  return gameMap[y][x] !== 1;
+}
+
+function movePacman() {
+  if (pacman.dir.x === 0 && pacman.dir.y === 0) return;
+  
+  if (pacman.nextDir.x !== 0 || pacman.nextDir.y !== 0) {
+    if (canMove(pacman.x + pacman.nextDir.x, pacman.y + pacman.nextDir.y)) {
+      pacman.dir = { ...pacman.nextDir };
+    }
+  }
+  
+  const newX = pacman.x + pacman.dir.x;
+  const newY = pacman.y + pacman.dir.y;
+  
+  if (canMove(newX, newY)) {
+    pacman.x = newX;
+    pacman.y = newY;
+    
+    // 吃豆子
+    if (gameMap[pacman.y][pacman.x] === 2) {
+      gameMap[pacman.y][pacman.x] = 0;
+      score += 10;
+    } else if (gameMap[pacman.y][pacman.x] === 3) {
+      gameMap[pacman.y][pacman.x] = 0;
+      score += 50;
+      powerMode = true;
+      powerTimer = 600; // 10秒 (60fps)
+    }
+  }
+  
+  // 动画
+  pacman.mouthOpen = !pacman.mouthOpen;
+  pacman.mouth = pacman.mouthOpen ? 0.2 : 0;
+  
+  // 检查胜利
+  let beansLeft = false;
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (gameMap[y][x] === 2 || gameMap[y][x] === 3) {
+        beansLeft = true;
+        break;
+      }
+    }
+  }
+  if (!beansLeft) {
+    gameWin = true;
+    document.getElementById('gameWin').classList.add('show');
+  }
+  
+  updateScore();
+}
+
+function moveGhosts() {
+  ghosts.forEach((ghost, idx) => {
+    const dirs = [
+      { x: 0, y: -1 }, { x: 0, y: 1 },
+      { x: -1, y: 0 }, { x: 1, y: 0 }
+    ];
+    
+    // 随机改变方向
+    if (Math.random() < 0.02) {
+      ghost.dir = dirs[Math.floor(Math.random() * 4)];
+    }
+    
+    // 尝试移动
+    let moved = false;
+    const tryDirs = dirs.sort(() => Math.random() - 0.5);
+    
+    for (const d of tryDirs) {
+      const newX = ghost.x + d.x;
+      const newY = ghost.y + d.y;
+      if (canMove(newX, newY)) {
+        ghost.x = newX;
+        ghost.y = newY;
+        ghost.dir = d;
+        moved = true;
+        break;
+      }
+    }
+    
+    // 检查是否碰到吃豆人
+    if (ghost.x === pacman.x && ghost.y === pacman.y) {
+      if (powerMode) {
+        // 吃掉幽灵
+        ghost.x = 9 + idx;
+        ghost.y = 8;
+        score += 200;
+        updateScore();
+      } else {
+        // 吃掉吃豆人
+        lives--;
+        updateScore();
+        if (lives <= 0) {
+          gameOver = true;
+          document.getElementById('gameOver').classList.add('show');
+        } else {
+          pacman.x = 10;
+          pacman.y = 10;
+          pacman.dir = { x: 0, y: 0 };
+        }
+      }
+    }
+  });
+}
+
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // 绘制地图
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const tile = gameMap[y][x];
+      const px = x * TILE;
+      const py = y * TILE;
+      
+      if (tile === 1) {
+        // 墙
+        ctx.fillStyle = '#2196F3';
+        ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+      } else if (tile === 2) {
+        // 小豆子
+        ctx.fillStyle = '#ffeb3b';
+        ctx.beginPath();
+        ctx.arc(px + TILE/2, py + TILE/2, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (tile === 3) {
+        // 大力丸
+        ctx.fillStyle = powerMode ? '#ff5722' : '#ffeb3b';
+        ctx.beginPath();
+        ctx.arc(px + TILE/2, py + TILE/2, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  
+  // 绘制吃豆人
+  const px = pacman.x * TILE + TILE/2;
+  const py = pacman.y * TILE + TILE/2;
+  ctx.fillStyle = '#ffeb3b';
+  ctx.beginPath();
+  
+  let angle = 0;
+  if (pacman.dir.x === 1) angle = 0;
+  else if (pacman.dir.x === -1) angle = Math.PI;
+  else if (pacman.dir.y === -1) angle = -Math.PI/2;
+  else if (pacman.dir.y === 1) angle = Math.PI/2;
+  
+  ctx.moveTo(px, py);
+  ctx.arc(px, py, TILE/2 - 2, angle + pacman.mouth * Math.PI, angle + (2 - pacman.mouth) * Math.PI);
+  ctx.fill();
+  
+  // 绘制幽灵
+  ghosts.forEach(ghost => {
+    const gx = ghost.x * TILE;
+    const gy = ghost.y * TILE;
+    ctx.fillStyle = powerMode ? '#8888ff' : ghost.color;
+    ctx.beginPath();
+    ctx.arc(gx + TILE/2, gy + TILE/2 - 2, TILE/2 - 3, Math.PI, 0);
+    ctx.lineTo(gx + TILE - 3, gy + TILE - 3);
+    ctx.lineTo(gx + 3, gy + TILE - 3);
+    ctx.fill();
+    
+    // 眼睛
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(gx + 6, gy + 7, 3, 0, Math.PI * 2);
+    ctx.arc(gx + 14, gy + 7, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(gx + 6 + ghost.dir.x * 2, gy + 7 + ghost.dir.y * 2, 1.5, 0, Math.PI * 2);
+    ctx.arc(gx + 14 + ghost.dir.x * 2, gy + 7 + ghost.dir.y * 2, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+let lastTime = 0;
+let moveCounter = 0;
+
+function update(time = 0) {
+  if (gameOver || gameWin || paused) {
+    requestAnimationFrame(update);
+    return;
+  }
+  
+  const delta = time - lastTime;
+  lastTime = time;
+  
+  // 控制速度
+  moveCounter++;
+  if (moveCounter >= 8) { // 约每秒移动6次
+    movePacman();
+    moveGhosts();
+    moveCounter = 0;
+  }
+  
+  // 大力丸时间
+  if (powerMode) {
+    powerTimer--;
+    if (powerTimer <= 0) {
+      powerMode = false;
+    }
+  }
+  
+  draw();
+  requestAnimationFrame(update);
+}
+
+function restart() {
+  initGame();
+}
+
+function setDir(x, y) {
+  pacman.nextDir = { x, y };
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') setDir(0, -1);
+  if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') setDir(0, 1);
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') setDir(-1, 0);
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') setDir(1, 0);
+  if (e.key === ' ') {
+    paused = !paused;
+    e.preventDefault();
+  }
+});
+
+initGame();
+update();
+</script>
+</body>
+</html>

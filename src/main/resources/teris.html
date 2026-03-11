@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>俄罗斯方块</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+  background: #1a1a2e; 
+  min-height: 100vh; 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  justify-content: center; 
+  font-family: 'Segoe UI', sans-serif;
+  color: #fff;
+  padding: 20px;
+}
+.menu { margin-bottom: 20px; }
+.menu a { color: #00d4ff; text-decoration: none; margin: 0 10px; font-size: 16px; }
+.menu a:hover { text-decoration: underline; }
+h1 { margin-bottom: 20px; text-shadow: 0 0 10px #e94560; }
+.game-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+.canvas-wrap { position: relative; border: 3px solid #e94560; border-radius: 8px; overflow: hidden; box-shadow: 0 0 30px rgba(233,69,96,0.3); }
+canvas { display: block; background: #16213e; }
+.info-panel { display: flex; flex-direction: column; gap: 15px; min-width: 150px; }
+.info-box { 
+  background: #16213e; 
+  padding: 15px; 
+  border-radius: 8px; 
+  border: 2px solid #0f3460;
+}
+.info-box h3 { color: #e94560; margin-bottom: 10px; font-size: 14px; }
+.info-box .value { font-size: 24px; font-weight: bold; }
+.next-piece canvas { border: 2px solid #e94560; border-radius: 4px; margin-top: 10px; }
+.controls { 
+  margin-top: 20px; 
+  text-align: center; 
+  color: #888;
+  font-size: 12px;
+}
+.controls span { margin: 0 10px; }
+.game-over {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  display: none;
+}
+.game-over.show { display: flex; }
+.game-over h2 { color: #e94560; font-size: 32px; margin-bottom: 20px; }
+.game-over button {
+  background: #e94560;
+  color: #fff;
+  border: none;
+  padding: 12px 30px;
+  font-size: 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.game-over button:hover { transform: scale(1.05); }
+.mobile-controls {
+  display: none;
+  margin-top: 20px;
+  gap: 10px;
+}
+@media (max-width: 600px) {
+  .mobile-controls { display: flex; justify-content: center; flex-wrap: wrap; }
+  .controls { display: none; }
+}
+.mobile-btn {
+  width: 60px; height: 60px;
+  background: #e94560;
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+<div class="menu">
+  <a href="teris.html">俄罗斯方块</a>
+  <a href="breakout.html">打砖块</a>
+  <a href="snake.html">贪吃蛇</a>
+</div>
+<h1>🎮 俄罗斯方块</h1>
+<div class="game-container">
+  <div class="canvas-wrap">
+    <canvas id="game" width="300" height="600"></canvas>
+    <div class="game-over" id="gameOver">
+      <h2>游戏结束!</h2>
+      <button onclick="restart()">再来一局</button>
+    </div>
+  </div>
+  <div class="info-panel">
+    <div class="info-box">
+      <h3>得分</h3>
+      <div class="value" id="score">0</div>
+    </div>
+    <div class="info-box">
+      <h3>等级</h3>
+      <div class="value" id="level">1</div>
+    </div>
+    <div class="info-box">
+      <h3>下一个</h3>
+      <canvas id="next" width="100" height="80"></canvas>
+    </div>
+  </div>
+</div>
+<div class="controls">
+  <span>← → 移动</span>
+  <span>↓ 加速</span>
+  <span>↑ 旋转</span>
+  <span>空格 暂停</span>
+</div>
+<div class="mobile-controls">
+  <button class="mobile-btn" onclick="move(-1)">←</button>
+  <button class="mobile-btn" onclick="rotate()">↻</button>
+  <button class="mobile-btn" onclick="move(1)">→</button>
+  <button class="mobile-btn" onclick="drop()">↓</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const nextCanvas = document.getElementById('next');
+const nextCtx = nextCanvas.getContext('2d');
+
+const COLS = 10;
+const ROWS = 20;
+const BLOCK = 30;
+
+const SHAPES = [
+  [[1,1,1,1]],
+  [[1,1],[1,1]],
+  [[1,1,1],[0,1,0]],
+  [[1,1,1],[1,0,0]],
+  [[1,1,1],[0,0,1]],
+  [[1,1,0],[0,1,1]],
+  [[0,1,1],[1,1,0]]
+];
+
+const COLORS = ['#e94560','#0f3460','#533483','#e94560','#16213e','#0f3460','#e94560'];
+
+let board = Array(ROWS).fill(null).map(()=>Array(COLS).fill(0));
+let currentPiece = null;
+let nextPiece = null;
+let score = 0;
+let level = 1;
+let gameOver = false;
+let paused = false;
+let lastTime = 0;
+let dropCounter = 0;
+let dropInterval = 1000;
+
+function randomPiece() {
+  const idx = Math.floor(Math.random() * SHAPES.length);
+  return { shape: SHAPES[idx], color: COLORS[idx], x: 3, y: 0 };
+}
+
+function drawBlock(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x*BLOCK, y*BLOCK, BLOCK-1, BLOCK-1);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillRect(x*BLOCK, y*BLOCK, BLOCK-1, 4);
+  ctx.fillRect(x*BLOCK, y*BLOCK, 4, BLOCK-1);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(x*BLOCK+BLOCK-5, y*BLOCK+4, 4, BLOCK-5);
+  ctx.fillRect(x*BLOCK+4, y*BLOCK+BLOCK-5, BLOCK-5, 4);
+}
+
+function draw() {
+  ctx.fillStyle = '#16213e';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  for(let y=0; y<ROWS; y++) {
+    for(let x=0; x<COLS; x++) {
+      if(board[y][x]) drawBlock(ctx, x, y, board[y][x]);
+    }
+  }
+  
+  if(currentPiece) {
+    currentPiece.shape.forEach((row, y) => {
+      row.forEach((val, x) => {
+        if(val) drawBlock(ctx, x+currentPiece.x, y+currentPiece.y, currentPiece.color);
+      });
+    });
+  }
+}
+
+function drawNext() {
+  nextCtx.fillStyle = '#16213e';
+  nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+  if(!nextPiece) return;
+  
+  const BLOCK_NEXT = 20;
+  const offsetX = (nextCanvas.width - nextPiece.shape[0].length * BLOCK_NEXT) / 2;
+  const offsetY = (nextCanvas.height - nextPiece.shape.length * BLOCK_NEXT) / 2;
+  
+  nextPiece.shape.forEach((row, y) => {
+    row.forEach((val, x) => {
+      if(val) {
+        nextCtx.fillStyle = nextPiece.color;
+        nextCtx.fillRect(offsetX + x*BLOCK_NEXT, offsetY + y*BLOCK_NEXT, BLOCK_NEXT-1, BLOCK_NEXT-1);
+      }
+    });
+  });
+}
+
+function collide(px, py, shape) {
+  for(let y=0; y<shape.length; y++) {
+    for(let x=0; x<shape[y].length; x++) {
+      if(shape[y][x]) {
+        const nx = x + px;
+        const ny = y + py;
+        if(nx<0 || nx>=COLS || ny>=ROWS || (ny>=0 && board[ny][nx])) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function rotate() {
+  if(gameOver || paused) return;
+  const rotated = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row=>row[i]).reverse());
+  if(!collide(currentPiece.x, currentPiece.y, rotated)) {
+    currentPiece.shape = rotated;
+  } else if(!collide(currentPiece.x-1, currentPiece.y, rotated)) {
+    currentPiece.x--;
+    currentPiece.shape = rotated;
+  } else if(!collide(currentPiece.x+1, currentPiece.y, rotated)) {
+    currentPiece.x++;
+    currentPiece.shape = rotated;
+  }
+}
+
+function move(dir) {
+  if(gameOver || paused) return;
+  if(!collide(currentPiece.x+dir, currentPiece.y, currentPiece.shape)) {
+    currentPiece.x += dir;
+  }
+}
+
+function drop() {
+  if(gameOver || paused) return;
+  if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
+    currentPiece.y++;
+    score += 1;
+  } else {
+    lock();
+  }
+}
+
+function lock() {
+  currentPiece.shape.forEach((row, y) => {
+    row.forEach((val, x) => {
+      if(val) {
+        const ny = y + currentPiece.y;
+        if(ny < 0) {
+          gameOver = true;
+          document.getElementById('gameOver').classList.add('show');
+          return;
+        }
+        board[ny][x + currentPiece.x] = currentPiece.color;
+      }
+    });
+  });
+  
+  // 消除行
+  for(let y=ROWS-1; y>=0; y--) {
+    if(board[y].every(cell=>cell)) {
+      board.splice(y, 1);
+      board.unshift(Array(COLS).fill(0));
+      score += 100 * level;
+      if(score >= level * 1000) {
+        level++;
+        dropInterval = Math.max(100, 1000 - level * 100);
+      }
+    }
+  }
+  
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+  
+  currentPiece = nextPiece;
+  nextPiece = randomPiece();
+  drawNext();
+  
+  if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) {
+    gameOver = true;
+    document.getElementById('gameOver').classList.add('show');
+  }
+}
+
+function update(time = 0) {
+  if(gameOver || paused) {
+    requestAnimationFrame(update);
+    return;
+  }
+  
+  const delta = time - lastTime;
+  lastTime = time;
+  dropCounter += delta;
+  
+  if(dropCounter > dropInterval) {
+    drop();
+    dropCounter = 0;
+  }
+  
+  draw();
+  requestAnimationFrame(update);
+}
+
+function restart() {
+  board = Array(ROWS).fill(null).map(()=>Array(COLS).fill(0));
+  score = 0;
+  level = 1;
+  gameOver = false;
+  paused = false;
+  dropInterval = 1000;
+  currentPiece = randomPiece();
+  nextPiece = randomPiece();
+  document.getElementById('score').textContent = '0';
+  document.getElementById('level').textContent = '1';
+  document.getElementById('gameOver').classList.remove('show');
+  drawNext();
+}
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'ArrowLeft') move(-1);
+  if(e.key === 'ArrowRight') move(1);
+  if(e.key === 'ArrowDown') drop();
+  if(e.key === 'ArrowUp') rotate();
+  if(e.key === ' ') {
+    paused = !paused;
+    e.preventDefault();
+  }
+});
+
+restart();
+update();
+</script>
+</body>
+</html>
